@@ -5,7 +5,8 @@ import Browser.Navigation as Navigation
 import Element exposing (Element, fill)
 import Element.Input as Input
 import ElementFix exposing (text)
-import Http exposing (emptyBody)
+import Http
+import Json.Encode
 import Url exposing (Url)
 import Url.Parser as Parser exposing (Parser)
 import Util exposing (onEnter)
@@ -90,7 +91,18 @@ update msg model =
                     ( { model | page = Login { data | password = password } }, Cmd.none )
 
                 Submit ->
-                    ( model, Http.post { url = "http://localhost:8080/api/login", body = emptyBody, expect = Http.expectString LoginResponse } )
+                    ( model
+                    , Http.post
+                        { url = "http://localhost:8080/api/login"
+                        , body =
+                            Http.jsonBody <|
+                                Json.Encode.object
+                                    [ ( "username", Json.Encode.string data.username )
+                                    , ( "password", Json.Encode.string data.password )
+                                    ]
+                        , expect = Http.expectString LoginResponse
+                        }
+                    )
 
         ( Register data, FormMsg formMsg ) ->
             case formMsg of
@@ -101,7 +113,18 @@ update msg model =
                     ( { model | page = Register { data | password = password } }, Cmd.none )
 
                 Submit ->
-                    ( model, Http.post { url = "http://localhost:8080/api/register", body = emptyBody, expect = Http.expectString RegisterResponse } )
+                    ( model
+                    , Http.post
+                        { url = "http://localhost:8080/api/register"
+                        , body =
+                            Http.jsonBody <|
+                                Json.Encode.object
+                                    [ ( "username", Json.Encode.string data.username )
+                                    , ( "password", Json.Encode.string data.password )
+                                    ]
+                        , expect = Http.expectString RegisterResponse
+                        }
+                    )
 
         _ ->
             ( model, Cmd.none )
