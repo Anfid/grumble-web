@@ -1,15 +1,12 @@
 module Main exposing (..)
 
+import Auth
 import Browser
 import Browser.Navigation as Navigation
 import Element exposing (Element, fill)
-import Element.Input as Input
 import ElementFix exposing (text)
-import Http
-import Json.Encode
 import Url exposing (Url)
 import Url.Parser as Parser exposing (Parser)
-import Util exposing (onEnter)
 
 
 
@@ -34,7 +31,7 @@ main =
 
 init : Dimensions -> Url -> Navigation.Key -> ( Model, Cmd Msg )
 init dimensions url key =
-    gotoUrl url <| Model key dimensions url (Login { username = "", password = "" })
+    gotoUrl url <| Model key dimensions url Welcome
 
 
 type alias Model =
@@ -45,16 +42,10 @@ type alias Model =
     }
 
 
-type alias FormData =
-    { username : String
-    , password : String
-    }
-
-
 type Page
-    = Register FormData
-    | Login FormData
-    | Messages
+    = Welcome
+    | Auth Auth.Model
+    | Messages String
     | NotFound
 
 
@@ -68,66 +59,36 @@ type Msg
     = UrlChanged Url
     | LinkClicked Browser.UrlRequest
     | Resize Int Int
-    | FormMsg FormMsg
-    | LoginResponse (Result Http.Error String)
-    | RegisterResponse (Result Http.Error String)
-
-
-type FormMsg
-    = Submit
-    | UsernameUpdated String
-    | PasswordUpdated String
+    | AuthMsg Auth.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case ( model.page, msg ) of
-        ( Login data, FormMsg formMsg ) ->
-            case formMsg of
-                UsernameUpdated username ->
-                    ( { model | page = Login { data | username = username } }, Cmd.none )
+    case ( msg, model.page ) of
+        ( UrlChanged url, _ ) ->
+            gotoUrl url model
 
-                PasswordUpdated password ->
-                    ( { model | page = Login { data | password = password } }, Cmd.none )
+        ( LinkClicked urlRequest, _ ) ->
+            case urlRequest of
+                Browser.Internal url ->
+                    ( model, Navigation.pushUrl model.key (Url.toString url) )
 
-                Submit ->
-                    ( model
-                    , Http.post
-                        { url = "http://localhost:8080/api/login"
-                        , body =
-                            Http.jsonBody <|
-                                Json.Encode.object
-                                    [ ( "username", Json.Encode.string data.username )
-                                    , ( "password", Json.Encode.string data.password )
-                                    ]
-                        , expect = Http.expectString LoginResponse
-                        }
-                    )
+                Browser.External href ->
+                    ( model, Navigation.load href )
 
-        ( Register data, FormMsg formMsg ) ->
-            case formMsg of
-                UsernameUpdated username ->
-                    ( { model | page = Register { data | username = username } }, Cmd.none )
-
-                PasswordUpdated password ->
-                    ( { model | page = Register { data | password = password } }, Cmd.none )
-
-                Submit ->
-                    ( model
-                    , Http.post
-                        { url = "http://localhost:8080/api/register"
-                        , body =
-                            Http.jsonBody <|
-                                Json.Encode.object
-                                    [ ( "username", Json.Encode.string data.username )
-                                    , ( "password", Json.Encode.string data.password )
-                                    ]
-                        , expect = Http.expectString RegisterResponse
-                        }
-                    )
+        ( AuthMsg authMsg, Auth authModel ) ->
+            Auth.update authMsg authModel
+                |> handleUpdate Auth AuthMsg model
 
         _ ->
             ( model, Cmd.none )
+
+
+handleUpdate : (subModel -> Page) -> (subMsg -> Msg) -> Model -> ( subModel, Cmd subMsg ) -> ( Model, Cmd Msg )
+handleUpdate toPage toMsg model ( subModel, subCmd ) =
+    ( { model | page = toPage subModel }
+    , Cmd.map toMsg subCmd
+    )
 
 
 
@@ -136,7 +97,7 @@ update msg model =
 
 view : Model -> Browser.Document Msg
 view model =
-    { title = "Chat"
+    { title = "Grumble"
     , body = [ Element.layout [ Element.width fill ] (body model) ]
     }
 
@@ -144,30 +105,23 @@ view model =
 body : Model -> Element Msg
 body model =
     case model.page of
-        Register _ ->
-            text "Welcome!"
-
-        Login form ->
-            Element.column []
-                [ text "Welcome back!"
-                , Input.username [ onEnter <| FormMsg Submit ]
-                    { onChange = \username -> FormMsg <| UsernameUpdated username
-                    , text = form.username
-                    , placeholder = Just <| Input.placeholder [] (text "Username")
-                    , label = Input.labelAbove [] <| text "Username"
+        Welcome ->
+            Element.wrappedRow []
+                [ Element.link []
+                    { url = "/login"
+                    , label = text "Log in"
                     }
-                , Input.currentPassword [ onEnter <| FormMsg Submit ]
-                    { onChange = \pwd -> FormMsg <| PasswordUpdated pwd
-                    , text = form.password
-                    , placeholder = Just <| Input.placeholder [] (text "Password")
-                    , label = Input.labelAbove [] <| text "Password"
-                    , show = False
+                , Element.link []
+                    { url = "/register"
+                    , label = text "Create an account"
                     }
-                , Input.button [] { onPress = Just (FormMsg Submit), label = text "Login" }
                 ]
 
-        Messages ->
-            text "todo: chat list"
+        Auth authModel ->
+            Element.map AuthMsg <| Auth.view authModel
+
+        Messages message ->
+            text <| "Login success: " ++ message
 
         NotFound ->
             text "Now, how did we get here?"
@@ -196,13 +150,13 @@ gotoUrl : Url -> Model -> ( Model, Cmd Msg )
 gotoUrl url model =
     case Parser.parse parser url of
         Just HomeRoute ->
-            ( { model | page = Login { username = "", password = "" } }, Cmd.none )
+            ( { model | page = Welcome }, Cmd.none )
 
         Just LoginRoute ->
-            ( { model | page = Login { username = "", password = "" } }, Cmd.none )
+            ( { model | page = Auth Auth.defaultLoginModel }, Cmd.none )
 
         Just RegisterRoute ->
-            ( { model | page = Register { username = "", password = "" } }, Cmd.none )
+            ( { model | page = Auth Auth.defaultRegisterModel }, Cmd.none )
 
         Nothing ->
             ( { model | page = NotFound }, Cmd.none )
