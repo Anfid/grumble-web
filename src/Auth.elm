@@ -1,10 +1,11 @@
-module Auth exposing (Model, Msg, defaultLoginModel, defaultRegisterModel, update, view)
+module Auth exposing (Model, Msg, defaultLoginModel, defaultRegisterModel, toLoginModel, toRegisterModel, update, view)
 
-import Element exposing (Element)
+import Element exposing (Element, fill)
 import Element.Input as Input
 import ElementFix exposing (text)
 import Http
 import Json.Decode exposing (Decoder)
+import Style exposing (Style)
 import Url
 import Util exposing (onEnter)
 
@@ -31,50 +32,71 @@ defaultLoginModel =
     { view = Login, username = "", password = "" }
 
 
+toLoginModel : Model -> Model
+toLoginModel model =
+    { model | view = Login }
+
+
+toRegisterModel : Model -> Model
+toRegisterModel model =
+    { model | view = Register }
+
+
 
 -- VIEW
 
 
-view : Model -> Element Msg
-view model =
+view : Model -> Style -> Element Msg
+view model style =
     case model.view of
         Login ->
-            Element.column []
-                [ text "Welcome back!"
-                , Input.username [ onEnter Submit ]
-                    { onChange = \username -> UsernameUpdated username
-                    , text = model.username
-                    , placeholder = Just <| Input.placeholder [] (text "Username")
-                    , label = Input.labelAbove [] <| text "Username"
-                    }
-                , Input.currentPassword [ onEnter Submit ]
-                    { onChange = \pwd -> PasswordUpdated pwd
-                    , text = model.password
-                    , placeholder = Just <| Input.placeholder [] (text "Password")
-                    , label = Input.labelAbove [] <| text "Password"
-                    , show = False
-                    }
-                , Input.button [] { onPress = Just Submit, label = text "Login" }
+            Element.column [ Element.width fill, Element.height fill, Style.background style ]
+                [ Element.link (Element.alignRight :: Style.button style) { url = "/register", label = text "Create new account" }
+                , Element.column [ Element.centerX, Element.centerY, Element.padding 20, Element.spacing 20 ]
+                    [ Element.el (Element.centerX :: Style.text style headingSize) <| text "Welcome back!"
+                    , Input.username (onEnter Submit :: Style.textInput style)
+                        { onChange = \username -> UsernameUpdated username
+                        , text = model.username
+                        , placeholder = Just <| Input.placeholder [] (text "Username")
+                        , label = Input.labelAbove (Style.text style 20) <| text "Username"
+                        }
+                    , Input.currentPassword (onEnter Submit :: Style.textInput style)
+                        { onChange = \pwd -> PasswordUpdated pwd
+                        , text = model.password
+                        , placeholder = Just <| Input.placeholder [] (text "Password")
+                        , label = Input.labelAbove (Style.text style 20) <| text "Password"
+                        , show = False
+                        }
+                    , Input.button (Element.centerX :: Style.button style) { onPress = Just Submit, label = text "Login" }
+                    ]
                 ]
 
         Register ->
-            Element.column []
-                [ text "Welcome!"
-                , Input.username [ onEnter <| Submit ]
-                    { onChange = \username -> UsernameUpdated username
-                    , text = model.username
-                    , placeholder = Just <| Input.placeholder [] (text "Username")
-                    , label = Input.labelAbove [] <| text "Username"
-                    }
-                , Input.currentPassword [ onEnter Submit ]
-                    { onChange = \pwd -> PasswordUpdated pwd
-                    , text = model.password
-                    , placeholder = Just <| Input.placeholder [] (text "Password")
-                    , label = Input.labelAbove [] <| text "Password"
-                    , show = False
-                    }
-                , Input.button [] { onPress = Just Submit, label = text "Register" }
+            Element.column [ Element.width fill, Element.height fill, Style.background style ]
+                [ Element.link (Element.alignRight :: Style.button style) { url = "/login", label = text "Log in with existing account" }
+                , Element.column [ Element.centerX, Element.centerY, Element.padding 20, Element.spacing 20 ]
+                    [ Element.el (Element.centerX :: Style.text style headingSize) <| text "Welcome!"
+                    , Input.username (onEnter Submit :: Style.textInput style)
+                        { onChange = \username -> UsernameUpdated username
+                        , text = model.username
+                        , placeholder = Just <| Input.placeholder [] (text "Username")
+                        , label = Input.labelAbove (Style.text style 20) <| text "Username"
+                        }
+                    , Input.newPassword (onEnter Submit :: Style.textInput style)
+                        { onChange = \pwd -> PasswordUpdated pwd
+                        , text = model.password
+                        , placeholder = Just <| Input.placeholder [] (text "Password")
+                        , label = Input.labelAbove (Style.text style 20) <| text "Password"
+                        , show = False
+                        }
+                    , Input.button (Element.centerX :: Style.button style) { onPress = Just Submit, label = text "Register" }
+                    ]
                 ]
+
+
+headingSize : Int
+headingSize =
+    36
 
 
 
@@ -126,11 +148,21 @@ update msg model =
                         }
                     )
 
-        LoginResponse _ ->
-            Debug.todo ""
+        LoginResponse response ->
+            case response of
+                Err _ ->
+                    Debug.todo ""
 
-        RegisterResponse _ ->
-            Debug.todo ""
+                Ok _ ->
+                    Debug.todo ""
+
+        RegisterResponse response ->
+            case response of
+                Err _ ->
+                    Debug.todo ""
+
+                Ok _ ->
+                    Debug.todo ""
 
 
 

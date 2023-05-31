@@ -5,6 +5,7 @@ import Browser
 import Browser.Navigation as Navigation
 import Element exposing (Element, fill)
 import ElementFix exposing (text)
+import Style exposing (Style)
 import Url exposing (Url)
 import Url.Parser as Parser exposing (Parser)
 
@@ -31,7 +32,7 @@ main =
 
 init : Dimensions -> Url -> Navigation.Key -> ( Model, Cmd Msg )
 init dimensions url key =
-    gotoUrl url <| Model key dimensions url Welcome
+    gotoUrl url <| Model key dimensions url Welcome Style.default
 
 
 type alias Model =
@@ -39,6 +40,7 @@ type alias Model =
     , dimensions : Dimensions
     , url : Url
     , page : Page
+    , style : Style
     }
 
 
@@ -106,19 +108,21 @@ body : Model -> Element Msg
 body model =
     case model.page of
         Welcome ->
-            Element.wrappedRow []
-                [ Element.link []
-                    { url = "/login"
-                    , label = text "Log in"
-                    }
-                , Element.link []
-                    { url = "/register"
-                    , label = text "Create an account"
-                    }
-                ]
+            Element.el [ Element.width fill, Element.height fill, Style.background model.style ] <|
+                Element.wrappedRow
+                    [ Element.alignRight, Element.spacing 5 ]
+                    [ Element.link (Style.button model.style)
+                        { url = "/login"
+                        , label = text "Log in"
+                        }
+                    , Element.link (Style.button model.style)
+                        { url = "/register"
+                        , label = text "Create an account"
+                        }
+                    ]
 
         Auth authModel ->
-            Element.map AuthMsg <| Auth.view authModel
+            Element.map AuthMsg <| Auth.view authModel model.style
 
         Messages message ->
             text <| "Login success: " ++ message
@@ -153,10 +157,20 @@ gotoUrl url model =
             ( { model | page = Welcome }, Cmd.none )
 
         Just LoginRoute ->
-            ( { model | page = Auth Auth.defaultLoginModel }, Cmd.none )
+            case model.page of
+                Auth authModel ->
+                    ( { model | page = Auth <| Auth.toLoginModel authModel }, Cmd.none )
+
+                _ ->
+                    ( { model | page = Auth Auth.defaultLoginModel }, Cmd.none )
 
         Just RegisterRoute ->
-            ( { model | page = Auth Auth.defaultRegisterModel }, Cmd.none )
+            case model.page of
+                Auth authModel ->
+                    ( { model | page = Auth <| Auth.toRegisterModel authModel }, Cmd.none )
+
+                _ ->
+                    ( { model | page = Auth Auth.defaultRegisterModel }, Cmd.none )
 
         Nothing ->
             ( { model | page = NotFound }, Cmd.none )

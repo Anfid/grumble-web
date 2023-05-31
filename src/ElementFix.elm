@@ -1,7 +1,7 @@
 module ElementFix exposing (text)
 
 import Element exposing (Element)
-import Html exposing (Html)
+import Html
 
 
 text : String -> Element msg
