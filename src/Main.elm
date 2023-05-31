@@ -2,10 +2,15 @@ module Main exposing (..)
 
 import Auth
 import Browser
+import Browser.Events
 import Browser.Navigation as Navigation
 import Element exposing (Element, fill)
+import Element.Input as Input
 import ElementFix exposing (text)
+import Http
+import Messaging
 import Style exposing (Style)
+import Time
 import Url exposing (Url)
 import Url.Parser as Parser exposing (Parser)
 
@@ -32,22 +37,28 @@ main =
 
 init : Dimensions -> Url -> Navigation.Key -> ( Model, Cmd Msg )
 init dimensions url key =
-    gotoUrl url <| Model key dimensions url Welcome Style.default
+    gotoUrl url <| Model key dimensions url Guest Welcome Style.default
 
 
 type alias Model =
     { key : Navigation.Key
     , dimensions : Dimensions
     , url : Url
+    , session : Session
     , page : Page
     , style : Style
     }
 
 
+type Session
+    = Guest
+    | User Auth.AuthInfo
+
+
 type Page
     = Welcome
     | Auth Auth.Model
-    | Messages String
+    | Messaging Messaging.Model
     | NotFound
 
 
@@ -61,7 +72,12 @@ type Msg
     = UrlChanged Url
     | LinkClicked Browser.UrlRequest
     | Resize Int Int
+    | TokenRefreshTick Time.Posix
+    | TokenRefreshResult (Result Http.Error Auth.AuthInfo)
+    | Logout
+    | LogoutResult (Result Http.Error String)
     | AuthMsg Auth.Msg
+    | MessagingMsg Messaging.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -78,9 +94,37 @@ update msg model =
                 Browser.External href ->
                     ( model, Navigation.load href )
 
+        ( TokenRefreshTick _, _ ) ->
+            case model.session of
+                User authInfo ->
+                    ( model, Auth.tokenRefreshRequest authInfo.refresh TokenRefreshResult )
+
+                Guest ->
+                    ( model, Cmd.none )
+
+        ( Logout, _ ) ->
+            case model.session of
+                User authInfo ->
+                    ( { model | session = Guest }, Auth.tokenRevokeRequest authInfo.refresh LogoutResult )
+
+                Guest ->
+                    ( model, Cmd.none )
+
+        ( TokenRefreshResult tokenRefreshResult, _ ) ->
+            case tokenRefreshResult of
+                Ok authInfo ->
+                    ( { model | session = User authInfo }, Cmd.none )
+
+                Err _ ->
+                    Debug.todo ""
+
         ( AuthMsg authMsg, Auth authModel ) ->
-            Auth.update authMsg authModel
-                |> handleUpdate Auth AuthMsg model
+            case Auth.update authMsg authModel of
+                Auth.Continue state ->
+                    handleUpdate Auth AuthMsg model state
+
+                Auth.Finish result ->
+                    ( { model | session = User result }, Navigation.pushUrl model.key "/" )
 
         _ ->
             ( model, Cmd.none )
@@ -109,23 +153,35 @@ body model =
     case model.page of
         Welcome ->
             Element.el [ Element.width fill, Element.height fill, Style.background model.style ] <|
-                Element.wrappedRow
-                    [ Element.alignRight, Element.spacing 5 ]
-                    [ Element.link (Style.button model.style)
-                        { url = "/login"
-                        , label = text "Log in"
-                        }
-                    , Element.link (Style.button model.style)
-                        { url = "/register"
-                        , label = text "Create an account"
-                        }
-                    ]
+                case model.session of
+                    Guest ->
+                        Element.wrappedRow
+                            [ Element.alignRight, Element.spacing 5 ]
+                            [ Element.link (Style.button model.style)
+                                { url = "/login"
+                                , label = text "Log in"
+                                }
+                            , Element.link (Style.button model.style)
+                                { url = "/register"
+                                , label = text "Create an account"
+                                }
+                            ]
+
+                    User creds ->
+                        Element.column
+                            [ Element.width fill ]
+                            [ Input.button (Element.alignRight :: Style.button model.style)
+                                { onPress = Just Logout
+                                , label = text "Log out"
+                                }
+                            , Element.paragraph (Element.width fill :: Style.text model.style 20) <| [ text "Logged in with token ", text creds.authorization ]
+                            ]
 
         Auth authModel ->
             Element.map AuthMsg <| Auth.view authModel model.style
 
-        Messages message ->
-            text <| "Login success: " ++ message
+        Messaging messagingModel ->
+            Element.map MessagingMsg <| Messaging.view messagingModel model.style
 
         NotFound ->
             text "Now, how did we get here?"
@@ -181,5 +237,17 @@ gotoUrl url model =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.none
+subscriptions model =
+    let
+        authRefreshTimeSub =
+            case model.session of
+                Guest ->
+                    Sub.none
+
+                User auth ->
+                    Time.every (toFloat (1000 * auth.expiresIn)) TokenRefreshTick
+    in
+    Sub.batch
+        [ Browser.Events.onResize Resize
+        , authRefreshTimeSub
+        ]
