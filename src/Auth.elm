@@ -3,7 +3,6 @@ module Auth exposing
     , AuthInfo
     , Model
     , Msg
-    , RefreshKind(..)
     , defaultLoginModel
     , defaultRegisterModel
     , toLoginModel
@@ -136,13 +135,7 @@ type Msg
 type alias AuthInfo =
     { authorization : String
     , expiresIn : Int
-    , refresh : RefreshKind
     }
-
-
-type RefreshKind
-    = RefreshCookie
-    | RefreshToken String
 
 
 type AuthFlow
@@ -191,8 +184,10 @@ update msg model =
 
 loginRequest : String -> String -> Bool -> (Result Http.Error AuthInfo -> msg) -> Cmd msg
 loginRequest username password rememberMe msg =
-    Http.post
-        { url = "http://localhost:8080/api/v1/auth/login"
+    Http.riskyRequest
+        { method = "POST"
+        , headers = []
+        , url = "http://localhost:8080/api/v1/auth/login"
         , body =
             formBody
                 [ ( "login", username )
@@ -206,49 +201,51 @@ loginRequest username password rememberMe msg =
                   )
                 ]
         , expect = Http.expectJson msg authDecoder
+        , timeout = Nothing
+        , tracker = Nothing
         }
 
 
 registerRequest : String -> String -> (Result Http.Error String -> msg) -> Cmd msg
 registerRequest username password msg =
-    Http.post
-        { url = "http://localhost:8080/api/v1/users/register"
+    Http.riskyRequest
+        { method = "POST"
+        , headers = []
+        , url = "http://localhost:8080/api/v1/users/register"
         , body =
             formBody
                 [ ( "login", username )
                 , ( "password", password )
                 ]
         , expect = Http.expectString msg
+        , timeout = Nothing
+        , tracker = Nothing
         }
 
 
-tokenRefreshRequest : RefreshKind -> (Result Http.Error AuthInfo -> msg) -> Cmd msg
-tokenRefreshRequest refreshKind msg =
-    Http.post
-        { url = "http://localhost:8080/api/v1/auth/token"
-        , body =
-            case refreshKind of
-                RefreshCookie ->
-                    Http.emptyBody
-
-                RefreshToken token ->
-                    formBody [ ( "refresh_token", token ) ]
+tokenRefreshRequest : (Result Http.Error AuthInfo -> msg) -> Cmd msg
+tokenRefreshRequest msg =
+    Http.riskyRequest
+        { method = "POST"
+        , headers = []
+        , url = "http://localhost:8080/api/v1/auth/token"
+        , body = Http.emptyBody
         , expect = Http.expectJson msg authDecoder
+        , timeout = Nothing
+        , tracker = Nothing
         }
 
 
-tokenRevokeRequest : RefreshKind -> (Result Http.Error String -> msg) -> Cmd msg
-tokenRevokeRequest refreshKind msg =
-    Http.post
-        { url = "http://localhost:8080/api/v1/auth/revoke"
-        , body =
-            case refreshKind of
-                RefreshCookie ->
-                    Http.emptyBody
-
-                RefreshToken token ->
-                    formBody [ ( "refresh_token", token ) ]
-        , expect = Http.expectString msg
+tokenRevokeRequest : (Result Http.Error () -> msg) -> Cmd msg
+tokenRevokeRequest msg =
+    Http.riskyRequest
+        { method = "POST"
+        , headers = []
+        , url = "http://localhost:8080/api/v1/auth/revoke"
+        , body = Http.emptyBody
+        , expect = Http.expectWhatever msg
+        , timeout = Nothing
+        , tracker = Nothing
         }
 
 
@@ -268,32 +265,16 @@ formBody =
         >> Http.stringBody "application/x-www-form-urlencoded"
 
 
-type alias AuthResponse =
-    { jwt : String
-    , tokenType : String
-    , expiresIn : Int
-    , refreshToken : Maybe String
-    }
-
-
 authDecoder : Decoder AuthInfo
 authDecoder =
-    Json.Decode.map4 authResponseToAuthInfo
+    Json.Decode.map3 authResponseToAuthInfo
         (Json.Decode.field "jwt" Json.Decode.string)
         (Json.Decode.field "token_type" Json.Decode.string)
         (Json.Decode.field "expires_in" Json.Decode.int)
-        (Json.Decode.field "refresh_token" <| Json.Decode.nullable Json.Decode.string)
 
 
-authResponseToAuthInfo : String -> String -> Int -> Maybe String -> AuthInfo
-authResponseToAuthInfo jwt tokenType expiresIn refreshToken =
+authResponseToAuthInfo : String -> String -> Int -> AuthInfo
+authResponseToAuthInfo jwt tokenType expiresIn =
     { authorization = tokenType ++ " " ++ jwt
     , expiresIn = expiresIn
-    , refresh =
-        case refreshToken of
-            Just token ->
-                RefreshToken token
-
-            Nothing ->
-                RefreshCookie
     }

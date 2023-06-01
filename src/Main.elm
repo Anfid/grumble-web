@@ -75,7 +75,7 @@ type Msg
     | TokenRefreshTick Time.Posix
     | TokenRefreshResult (Result Http.Error Auth.AuthInfo)
     | Logout
-    | LogoutResult (Result Http.Error String)
+    | LogoutResult (Result Http.Error ())
     | AuthMsg Auth.Msg
     | MessagingMsg Messaging.Msg
 
@@ -96,16 +96,16 @@ update msg model =
 
         ( TokenRefreshTick _, _ ) ->
             case model.session of
-                User authInfo ->
-                    ( model, Auth.tokenRefreshRequest authInfo.refresh TokenRefreshResult )
+                User _ ->
+                    ( model, Auth.tokenRefreshRequest TokenRefreshResult )
 
                 Guest ->
                     ( model, Cmd.none )
 
         ( Logout, _ ) ->
             case model.session of
-                User authInfo ->
-                    ( { model | session = Guest }, Auth.tokenRevokeRequest authInfo.refresh LogoutResult )
+                User _ ->
+                    ( { model | session = Guest }, Auth.tokenRevokeRequest LogoutResult )
 
                 Guest ->
                     ( model, Cmd.none )
